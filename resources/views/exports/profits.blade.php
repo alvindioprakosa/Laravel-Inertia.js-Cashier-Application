@@ -1,9 +1,9 @@
 <div class="title" style="padding-bottom: 13px">
     <div style="text-align: center;text-transform: uppercase;font-size: 15px">
-        Yan Afriyoko
+        Alvin Dio Prakosa
     </div>
     <div style="text-align: center">
-        Alamat: Desa Gedangalas, Kec. Gajah, Kab. Demak
+        Alamat: Desa Kedungombo, Kec. Tengaran, Kab. Semarang
     </div>
     <div style="text-align: center">
         Telp: 0857-9087-9087
