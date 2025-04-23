@@ -1,5 +1,3 @@
-<?php
-
 namespace App\Http\Controllers\Apps;
 
 use Inertia\Inertia;
@@ -13,74 +11,103 @@ use Barryvdh\DomPDF\Facade\Pdf;
 class SaleController extends Controller
 {
     /**
-     * index
+     * Show the sales index page.
      *
-     * @return void
+     * @return \Inertia\Response
      */
     public function index()
     {
         return Inertia::render('Apps/Sales/Index');
     }
-    
+
     /**
-     * filter
+     * Filter sales data by date range.
      *
-     * @param  mixed $request
-     * @return void
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Inertia\Response
      */
     public function filter(Request $request)
     {
+        // Validate the request
         $this->validate($request, [
-            'start_date'  => 'required',
-            'end_date'    => 'required',
+            'start_date'  => 'required|date',
+            'end_date'    => 'required|date|after_or_equal:start_date',
         ]);
 
-        //get data sales by range date
-        $sales = Transaction::with('cashier', 'customer')
-            ->whereDate('created_at', '>=', $request->start_date)
-            ->whereDate('created_at', '<=', $request->end_date)
-            ->get();
+        // Get sales data and total sales by date range
+        $salesData = $this->getSalesByDateRange($request->start_date, $request->end_date);
 
-        //get total sales by range date    
-        $total = Transaction::whereDate('created_at', '>=', $request->start_date)
-            ->whereDate('created_at', '<=', $request->end_date)
-            ->sum('grand_total');
-        
         return Inertia::render('Apps/Sales/Index', [
-            'sales'    => $sales,
-            'total'    => (int) $total
+            'sales'    => $salesData['sales'],
+            'total'    => (int) $salesData['total'],
         ]);
     }
 
     /**
-     * export
+     * Export sales data to an Excel file.
      *
-     * @param  mixed $request
-     * @return void
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Symfony\Component\HttpFoundation\BinaryFileResponse
      */
     public function export(Request $request)
     {
-        return Excel::download(new SalesExport($request->start_date, $request->end_date), 'sales : '.$request->start_date.' — '.$request->end_date.'.xlsx');
+        // Validate the request
+        $this->validate($request, [
+            'start_date'  => 'required|date',
+            'end_date'    => 'required|date|after_or_equal:start_date',
+        ]);
+
+        return Excel::download(new SalesExport($request->start_date, $request->end_date), 
+            'sales_' . $request->start_date . '_to_' . $request->end_date . '.xlsx');
     }
-    
+
     /**
-     * pdf
+     * Generate a PDF of sales data.
      *
-     * @param  mixed $request
-     * @return void
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Barryvdh\DomPDF\PDF
      */
     public function pdf(Request $request)
     {
-        //get sales by range date
-        $sales = Transaction::with('cashier', 'customer')->whereDate('created_at', '>=', $request->start_date)->whereDate('created_at', '<=', $request->end_date)->get();
+        // Validate the request
+        $this->validate($request, [
+            'start_date'  => 'required|date',
+            'end_date'    => 'required|date|after_or_equal:start_date',
+        ]);
 
-        //get total sales by range daate
-        $total = Transaction::whereDate('created_at', '>=', $request->start_date)->whereDate('created_at', '<=', $request->end_date)->sum('grand_total');
+        // Get sales data and total sales by date range
+        $salesData = $this->getSalesByDateRange($request->start_date, $request->end_date);
 
-        //load view PDF with data
-        $pdf = PDF::loadView('exports.sales', compact('sales', 'total'));
+        // Generate PDF
+        $pdf = PDF::loadView('exports.sales', [
+            'sales' => $salesData['sales'],
+            'total' => $salesData['total'],
+        ]);
 
-        //return PDF for preview / download
-        return $pdf->download('sales : '.$request->start_date.' — '.$request->end_date.'.pdf');
+        return $pdf->download('sales_' . $request->start_date . '_to_' . $request->end_date . '.pdf');
+    }
+
+    /**
+     * Get sales data by date range.
+     *
+     * @param  string  $startDate
+     * @param  string  $endDate
+     * @return array
+     */
+    private function getSalesByDateRange($startDate, $endDate)
+    {
+        $sales = Transaction::with('cashier', 'customer')
+            ->whereDate('created_at', '>=', $startDate)
+            ->whereDate('created_at', '<=', $endDate)
+            ->get();
+
+        $total = Transaction::whereDate('created_at', '>=', $startDate)
+            ->whereDate('created_at', '<=', $endDate)
+            ->sum('grand_total');
+
+        return [
+            'sales' => $sales,
+            'total' => $total,
+        ];
     }
 }
