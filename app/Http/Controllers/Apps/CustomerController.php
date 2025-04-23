@@ -1,11 +1,10 @@
-<?php
-
 namespace App\Http\Controllers\Apps;
 
 use Inertia\Inertia;
 use App\Models\Customer;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreCustomerRequest; // Use FormRequest class
 
 class CustomerController extends Controller
 {
@@ -16,12 +15,10 @@ class CustomerController extends Controller
      */
     public function index()
     {
-        //get customers
-        $customers = Customer::when(request()->q, function($customers) {
-            $customers = $customers->where('name', 'like', '%'. request()->q . '%');
+        $customers = Customer::when(request()->q, function ($customers) {
+            $customers = $customers->where('name', 'like', '%' . request()->q . '%');
         })->latest()->paginate(5);
 
-        //return inertia
         return Inertia::render('Apps/Customers/Index', [
             'customers' => $customers,
         ]);
@@ -40,35 +37,24 @@ class CustomerController extends Controller
     /**
      * Store a newly created resource in storage.
      *
-     * @param  \Illuminate\Http\Request  $request
+     * @param  \App\Http\Requests\StoreCustomerRequest  $request
      * @return \Illuminate\Http\Response
      */
-    public function store(Request $request)
+    public function store(StoreCustomerRequest $request)
     {
-        /**
-         * validate
-         */
-        $this->validate($request, [
-            'name'      => 'required',
-            'no_telp'   => 'required|unique:customers',
-            'address'   => 'required',
-        ]);
-
-        //create customer
         Customer::create([
-            'name'      => $request->name,
-            'no_telp'   => $request->no_telp,
-            'address'   => $request->address,
+            'name'    => $request->name,
+            'no_telp' => $request->no_telp,
+            'address' => $request->address,
         ]);
 
-        //redirect
         return redirect()->route('apps.customers.index');
     }
 
     /**
      * Show the form for editing the specified resource.
      *
-     * @param  int  $id
+     * @param  \App\Models\Customer  $customer
      * @return \Illuminate\Http\Response
      */
     public function edit(Customer $customer)
@@ -81,47 +67,31 @@ class CustomerController extends Controller
     /**
      * Update the specified resource in storage.
      *
-     * @param  \Illuminate\Http\Request  $request
-     * @param  int  $id
+     * @param  \App\Http\Requests\StoreCustomerRequest  $request
+     * @param  \App\Models\Customer  $customer
      * @return \Illuminate\Http\Response
      */
-    public function update(Request $request, Customer $customer)
+    public function update(StoreCustomerRequest $request, Customer $customer)
     {
-        /**
-         * validate
-         */
-        $this->validate($request, [
-            'name'      => 'required',
-            'no_telp'   => 'required|unique:customers,no_telp,'.$customer->id,
-            'address'   => 'required',
-        ]);
-
-        //update customer
         $customer->update([
-            'name'      => $request->name,
-            'no_telp'   => $request->no_telp,
-            'address'   => $request->address,
+            'name'    => $request->name,
+            'no_telp' => $request->no_telp,
+            'address' => $request->address,
         ]);
 
-        //redirect
         return redirect()->route('apps.customers.index');
     }
 
     /**
      * Remove the specified resource from storage.
      *
-     * @param  int  $id
+     * @param  \App\Models\Customer  $customer
      * @return \Illuminate\Http\Response
      */
-    public function destroy($id)
+    public function destroy(Customer $customer)
     {
-        //find customer by ID
-        $customer = Customer::findOrFail($id);
-
-        //delete customer
         $customer->delete();
 
-        //redirect
         return redirect()->route('apps.customers.index');
     }
 }
