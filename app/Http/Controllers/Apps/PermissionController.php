@@ -1,5 +1,3 @@
-<?php
-
 namespace App\Http\Controllers\Apps;
 
 use Illuminate\Http\Request;
@@ -16,12 +14,16 @@ class PermissionController extends Controller
      */
     public function __invoke(Request $request)
     {
-        //get permissions
-        $permissions = Permission::when(request()->q, function($permissions) {
-            $permissions = $permissions->where('name', 'like', '%'. request()->q . '%');
-        })->latest()->paginate(5);
+        // Get the query parameter for search and paginate value
+        $searchQuery = $request->get('q');
+        $perPage = $request->get('per_page', 5); // Default to 5 per page if not provided
 
-        //return inertia view
+        // Query permissions based on search query and paginate
+        $permissions = Permission::when($searchQuery, function($query) use ($searchQuery) {
+            return $query->where('name', 'like', '%'. $searchQuery . '%');
+        })->latest()->paginate($perPage);
+
+        // Return inertia view with permissions data
         return inertia('Apps/Permissions/Index', [
             'permissions' => $permissions
         ]);
