@@ -1,5 +1,3 @@
-<?php
-
 namespace App\Http\Controllers\Apps;
 
 use Inertia\Inertia;
@@ -18,12 +16,12 @@ class ProductController extends Controller
      */
     public function index()
     {
-        //get products
-        $products = Product::when(request()->q, function($products) {
-            $products = $products->where('title', 'like', '%'. request()->q . '%');
+        // Get products with optional search
+        $products = Product::when(request()->q, function($query) {
+            return $query->where('title', 'like', '%' . request()->q . '%');
         })->latest()->paginate(5);
 
-        //return inertia
+        // Return inertia view with products
         return Inertia::render('Apps/Products/Index', [
             'products' => $products,
         ]);
@@ -36,10 +34,10 @@ class ProductController extends Controller
      */
     public function create()
     {
-        //get categories
+        // Get categories for the product
         $categories = Category::all();
 
-        //return inertia
+        // Return inertia view with categories
         return Inertia::render('Apps/Products/Create', [
             'categories' => $categories
         ]);
@@ -53,51 +51,31 @@ class ProductController extends Controller
      */
     public function store(Request $request)
     {
-        /**
-         * validate
-         */
-        $this->validate($request, [
-            'image'         => 'required|image|mimes:jpeg,jpg,png|max:2000',
-            'barcode'       => 'required|unique:products',
-            'title'         => 'required',
-            'description'   => 'required',
-            'category_id'   => 'required',
-            'buy_price'     => 'required',
-            'sell_price'    => 'required',
-            'stock'         => 'required',
-        ]);
+        // Validate the product data
+        $this->validateProduct($request);
 
-        //upload image
-        $image = $request->file('image');
-        $image->storeAs('public/products', $image->hashName());
+        // Upload and store the image
+        $image = $this->storeImage($request);
 
-        //create product
-        Product::create([
-            'image'         => $image->hashName(),
-            'barcode'       => $request->barcode,
-            'title'         => $request->title,
-            'description'   => $request->description,
-            'category_id'   => $request->category_id,
-            'buy_price'     => $request->buy_price,
-            'sell_price'    => $request->sell_price,
-            'stock'         => $request->stock,
-        ]);
+        // Create product
+        Product::create($this->prepareProductData($request, $image));
 
-        //redirect
+        // Redirect to products index
         return redirect()->route('apps.products.index');
     }
 
     /**
      * Show the form for editing the specified resource.
      *
-     * @param  int  $id
+     * @param  \App\Models\Product  $product
      * @return \Illuminate\Http\Response
      */
     public function edit(Product $product)
     {
-        //get categories
+        // Get categories for editing product
         $categories = Category::all();
 
+        // Return inertia view with product and categories
         return Inertia::render('Apps/Products/Edit', [
             'product' => $product,
             'categories' => $categories
@@ -108,50 +86,95 @@ class ProductController extends Controller
      * Update the specified resource in storage.
      *
      * @param  \Illuminate\Http\Request  $request
-     * @param  int  $id
+     * @param  \App\Models\Product  $product
      * @return \Illuminate\Http\Response
      */
     public function update(Request $request, Product $product)
     {
-        /**
-         * validate
-         */
-        $this->validate($request, [
-            'barcode'       => 'required|unique:products,barcode,'.$product->id,
+        // Validate the product data
+        $this->validateProduct($request, $product);
+
+        // Check if a new image is uploaded
+        $image = $request->file('image') ? $this->storeImage($request, $product) : $product->image;
+
+        // Update the product data
+        $product->update($this->prepareProductData($request, $image));
+
+        // Redirect to products index
+        return redirect()->route('apps.products.index');
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     *
+     * @param  \App\Models\Product  $product
+     * @return \Illuminate\Http\Response
+     */
+    public function destroy(Product $product)
+    {
+        // Delete image from storage
+        Storage::disk('local')->delete('public/products/' . basename($product->image));
+
+        // Delete the product
+        $product->delete();
+
+        // Redirect to products index
+        return redirect()->route('apps.products.index');
+    }
+
+    /**
+     * Validate the product data.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \App\Models\Product|null $product
+     * @return void
+     */
+    private function validateProduct(Request $request, Product $product = null)
+    {
+        $rules = [
+            'image'         => 'nullable|image|mimes:jpeg,jpg,png|max:2000',
+            'barcode'       => 'required|unique:products,barcode,' . ($product ? $product->id : 'NULL'),
             'title'         => 'required',
             'description'   => 'required',
             'category_id'   => 'required',
             'buy_price'     => 'required',
             'sell_price'    => 'required',
             'stock'         => 'required',
-        ]);
+        ];
 
-        //check image update
-        if ($request->file('image')) {
+        $this->validate($request, $rules);
+    }
 
-            //remove old image
-            Storage::disk('local')->delete('public/products/'.basename($product->image));
-        
-            //upload new image
-            $image = $request->file('image');
-            $image->storeAs('public/products', $image->hashName());
-
-            //update product with new image
-            $product->update([
-                'image'=> $image->hashName(),
-                'barcode'       => $request->barcode,
-                'title'         => $request->title,
-                'description'   => $request->description,
-                'category_id'   => $request->category_id,
-                'buy_price'     => $request->buy_price,
-                'sell_price'    => $request->sell_price,
-                'stock'         => $request->stock,
-            ]);
-
+    /**
+     * Store the product image.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \App\Models\Product|null $product
+     * @return string
+     */
+    private function storeImage(Request $request, Product $product = null)
+    {
+        if ($product && $product->image) {
+            // Remove old image
+            Storage::disk('local')->delete('public/products/' . basename($product->image));
         }
 
-        //update product without image
-        $product->update([
+        // Store new image
+        $image = $request->file('image');
+        return $image->storeAs('public/products', $image->hashName());
+    }
+
+    /**
+     * Prepare product data for storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  string $image
+     * @return array
+     */
+    private function prepareProductData(Request $request, $image)
+    {
+        return [
+            'image'         => basename($image),
             'barcode'       => $request->barcode,
             'title'         => $request->title,
             'description'   => $request->description,
@@ -159,30 +182,6 @@ class ProductController extends Controller
             'buy_price'     => $request->buy_price,
             'sell_price'    => $request->sell_price,
             'stock'         => $request->stock,
-        ]);
-
-        //redirect
-        return redirect()->route('apps.products.index');
-    }
-
-    /**
-     * Remove the specified resource from storage.
-     *
-     * @param  int  $id
-     * @return \Illuminate\Http\Response
-     */
-    public function destroy($id)
-    {
-        //find by ID
-        $product = Product::findOrFail($id);
-
-        //remove image
-        Storage::disk('local')->delete('public/products/'.basename($product->image));
-
-        //delete
-        $product->delete();
-
-        //redirect
-        return redirect()->route('apps.products.index');
+        ];
     }
 }
