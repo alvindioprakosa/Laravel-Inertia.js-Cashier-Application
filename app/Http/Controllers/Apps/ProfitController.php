@@ -1,5 +1,3 @@
-<?php
-
 namespace App\Http\Controllers\Apps;
 
 use Inertia\Inertia;
@@ -13,9 +11,9 @@ use Barryvdh\DomPDF\Facade\Pdf;
 class ProfitController extends Controller
 {
     /**
-     * index
+     * Show the profit index page.
      *
-     * @return void
+     * @return \Inertia\Response
      */
     public function index()
     {
@@ -23,59 +21,93 @@ class ProfitController extends Controller
     }
     
     /**
-     * filter
+     * Filter profits by date range.
      *
-     * @param  mixed $request
-     * @return void
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Inertia\Response
      */
     public function filter(Request $request)
     {
+        // Validate the request
         $this->validate($request, [
-            'start_date'  => 'required',
-            'end_date'    => 'required',
+            'start_date'  => 'required|date',
+            'end_date'    => 'required|date|after_or_equal:start_date',
         ]);
 
-        //get data profits by range date
-        $profits = Profit::with('transaction')->whereDate('created_at', '>=', $request->start_date)->whereDate('created_at', '<=', $request->end_date)->get();
+        // Get filtered data
+        $profitsData = $this->getProfitsByDateRange($request->start_date, $request->end_date);
 
-        //get total profit by range date    
-        $total = Profit::whereDate('created_at', '>=', $request->start_date)->whereDate('created_at', '<=', $request->end_date)->sum('total');
-        
         return Inertia::render('Apps/Profits/Index', [
-            'profits'   => $profits,
-            'total'     => (int) $total
+            'profits'   => $profitsData['profits'],
+            'total'     => (int) $profitsData['total'],
         ]);
     }
 
     /**
-     * export
+     * Export profits as Excel file.
      *
-     * @param  mixed $request
-     * @return void
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Symfony\Component\HttpFoundation\BinaryFileResponse
      */
     public function export(Request $request)
     {
-        return Excel::download(new ProfitsExport($request->start_date, $request->end_date), 'profits : '.$request->start_date.' — '.$request->end_date.'.xlsx');
+        // Validate the request
+        $this->validate($request, [
+            'start_date'  => 'required|date',
+            'end_date'    => 'required|date|after_or_equal:start_date',
+        ]);
+
+        return Excel::download(new ProfitsExport($request->start_date, $request->end_date), 
+            'profits_' . $request->start_date . '_to_' . $request->end_date . '.xlsx');
     }
     
     /**
-     * pdf
+     * Generate profits PDF report.
      *
-     * @param  mixed $request
-     * @return void
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Barryvdh\DomPDF\PDF
      */
     public function pdf(Request $request)
     {
-        //get data proftis by range date
-        $profits = Profit::with('transaction')->whereDate('created_at', '>=', $request->start_date)->whereDate('created_at', '<=', $request->end_date)->get();
+        // Validate the request
+        $this->validate($request, [
+            'start_date'  => 'required|date',
+            'end_date'    => 'required|date|after_or_equal:start_date',
+        ]);
 
-        //get total profit by range date
-        $total = Profit::whereDate('created_at', '>=', $request->start_date)->whereDate('created_at', '<=', $request->end_date)->sum('total');
+        // Get filtered data
+        $profitsData = $this->getProfitsByDateRange($request->start_date, $request->end_date);
 
-        //load view PDF with data
-        $pdf = PDF::loadView('exports.profits', compact('profits', 'total'));
+        // Generate PDF
+        $pdf = PDF::loadView('exports.profits', [
+            'profits' => $profitsData['profits'],
+            'total'   => $profitsData['total'],
+        ]);
 
-        //download PDF
-        return $pdf->download('profits : '.$request->start_date.' — '.$request->end_date.'.pdf');
+        return $pdf->download('profits_' . $request->start_date . '_to_' . $request->end_date . '.pdf');
+    }
+
+    /**
+     * Get profits data by date range.
+     *
+     * @param  string  $startDate
+     * @param  string  $endDate
+     * @return array
+     */
+    private function getProfitsByDateRange($startDate, $endDate)
+    {
+        $profits = Profit::with('transaction')
+            ->whereDate('created_at', '>=', $startDate)
+            ->whereDate('created_at', '<=', $endDate)
+            ->get();
+
+        $total = Profit::whereDate('created_at', '>=', $startDate)
+            ->whereDate('created_at', '<=', $endDate)
+            ->sum('total');
+
+        return [
+            'profits' => $profits,
+            'total'   => $total,
+        ];
     }
 }
